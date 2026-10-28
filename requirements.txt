@@ -1,5 +1,7 @@
 markdownify
-smolagents==1.13.0
+smolagents[openai]==1.13.0
+gradio==5.23.1
 requests
 duckduckgo_search
 pandas
+pytz

@@ -1,22 +1,30 @@
-from smolagents import CodeAgent,DuckDuckGoSearchTool, HfApiModel,load_tool,tool
 import datetime
+import os
 import requests
 import pytz
 import yaml
+from smolagents import (
+    CodeAgent,
+    DuckDuckGoSearchTool,
+    HfApiModel,
+    OpenAIServerModel,
+    load_tool,
+    tool,
+)
 from tools.final_answer import FinalAnswerTool
 
 from Gradio_UI import GradioUI
 
 # Below is an example of a tool that does nothing. Amaze us with your creativity !
 @tool
-def my_custom_tool(arg1:str, arg2:int)-> str: #it's import to specify the return type
+def my_sum_tool(arg1:int, arg2:int)-> int: #it's import to specify the return type
     #Keep this format for the description / args / args description but feel free to modify the tool
-    """A tool that does nothing yet 
+    """A tool that adds two integers.
     Args:
-        arg1: the first argument
-        arg2: the second argument
+        arg1: the first integer
+        arg2: the second integer
     """
-    return "What magic will you build ?"
+    return arg1 + arg2
 
 @tool
 def get_current_time_in_timezone(timezone: str) -> str:
@@ -36,26 +44,44 @@ def get_current_time_in_timezone(timezone: str) -> str:
 
 final_answer = FinalAnswerTool()
 
-# If the agent does not answer, the model is overloaded, please use another model or the following Hugging Face Endpoint that also contains qwen2.5 coder:
-# model_id='https://pflgm2locj2t89co.us-east-1.aws.endpoints.huggingface.cloud' 
 
-model = HfApiModel(
-max_tokens=2096,
-temperature=0.5,
-model_id='Qwen/Qwen2.5-Coder-32B-Instruct',# it is possible that this model may be overloaded
-custom_role_conversions=None,
-)
+def create_model():
+    provider = os.getenv("MODEL_PROVIDER", "ollama").strip().lower()
+    temperature = 0.5
+    max_tokens = 2096
+
+    if provider == "ollama":
+        return OpenAIServerModel(
+            model_id=os.getenv("OLLAMA_MODEL", "llama:latest"),
+            api_base=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
+            api_key="ollama",
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    if provider == "hf":
+        return HfApiModel(
+            max_tokens=max_tokens,
+            temperature=temperature,
+            model_id=os.getenv("HF_MODEL", "Qwen/Qwen2.5-Coder-32B-Instruct"),
+            custom_role_conversions=None,
+        )
+
+    raise ValueError("Unsupported MODEL_PROVIDER. Choose 'ollama' or 'hf'.")
+
+
+model = create_model()
 
 
 # Import tool from Hub
-image_generation_tool = load_tool("agents-course/text-to-image", trust_remote_code=True)
+# image_generation_tool = load_tool("agents-course/text-to-image", trust_remote_code=True)
 
 with open("prompts.yaml", 'r') as stream:
     prompt_templates = yaml.safe_load(stream)
     
 agent = CodeAgent(
     model=model,
-    tools=[final_answer], ## add your tools here (don't remove final answer)
+    tools=[final_answer, my_sum_tool, get_current_time_in_timezone], ## add your tools here (don't remove final answer)
     max_steps=6,
     verbosity_level=1,
     grammar=None,
